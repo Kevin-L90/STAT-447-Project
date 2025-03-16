@@ -1,0 +1,30 @@
+---
+title: 'STAT 443: Assignment 2'
+author: 'Kevin Liu (94200474)'
+date: "March 14, 2025"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#if you do not have the package, type install.packages("name_of_the_package")
+library(knitr)
+```
+
+For this project, as suggested on Piazza, I will look at Bayesian classification methods on the crime category. Alternatively, if that does not work out, I will use time series to find potential trends/seasonal effects on crime statistics (potentially splitting by neighborhood). Data is from [here](https://geodash.vpd.ca/opendata/#)
+
+```{r, echo=TRUE}
+crime_data = read.csv("crime_data/crime_data.csv")
+head(crime_data)
+```
+
+A second data set that I could potentially use is from the WHO, with road traffic accidents for people aged 15-24. I could also use time series on this data set, or potentially apply a simple model and improved model. Data is from [here](https://platform.who.int/mortality/themes/theme-details/topics/indicator-groups/indicator-group-details/MDB/road-traffic-accidents)
+
+```{r, echo=TRUE}
+headers = read.csv("WHO.csv", skip = 6, header = F, nrows = 1, as.is = T)
+WHO_data = read.csv("WHO.csv", skip = 7, header = F)
+colnames(WHO_data)= headers
+head(WHO_data)
+```
