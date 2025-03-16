@@ -1,0 +1,127 @@
+---
+title: 'STAT 447: Homework 7'
+author: 'Kevin Liu (94200474)'
+date: "March 9, 2025"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#if you do not have the package, type install.packages("name_of_the_package")
+library(knitr)
+library(tseries)
+library(rstan)
+```
+
+### Question 1
+```{r, echo=TRUE}
+fit = stan(
+  seed = 123,
+  file = "beta_binomial.stan",
+  data = list(n=3, k=3),
+  iter = 1000
+)
+
+print(fit)
+```
+The IQR of the posterior is [-2.77, 0.50].
+
+### Question 2
+
+```{r, echo=TRUE}
+
+suppressPackageStartupMessages(require(ggplot2))
+suppressPackageStartupMessages(require(dplyr))
+
+df = read.csv(
+  "https://raw.githubusercontent.com/UBC-Stat-ML/web447/1e345149a5b698ccdf0a7e9b0aeabec2463c50ca/data/sunspots-SN_m_tot_V2.0.csv",
+  sep = ";", header=FALSE) %>%
+  mutate(count = ceiling(V4)) %>%
+  rename(year = V3) %>%
+  filter(year > 2005)
+
+count = as.integer(df$count)
+time = as.numeric(df$year)
+
+data = list(
+  n = length(count),
+  counts = count,
+  time = time
+)
+
+init_fun <- function() {
+  list(theta1 = 40, theta2 = 1.0, theta3 = 0.25)
+}
+
+fit = stan(
+  seed = 123,
+  file = "poisson.stan",
+  data = data,
+  init = init_fun,
+  iter = 2500
+)
+
+print(fit)
+
+library(bayesplot)
+
+mcmc_hist(as.array(fit), pars = c("theta1", "theta2", "theta3"))
+
+mcmc_pairs(as.array(fit), pars = c("theta1", "theta2", "theta3"))
+```
+
+
+### Question 3
+```{r, echo=TRUE}
+# prior: Beta(alpha, beta)
+alpha = 1
+beta = 2 
+
+# observations: binomial draws
+n_successes = 3 
+n_trials = 3
+
+gamma_beta_binomial = function(p) {
+  if (p < 0 || p > 1) return(0.0)
+  dbeta(p, alpha, beta) * dbinom(x = n_successes, size = n_trials, prob = p)
+}
+
+# simple Metropolis-Hastings algorithm (normal proposal)
+simple_mh = function(gamma, initial_point, n_iters) {
+  samples = numeric(n_iters) 
+  dim = length(initial_point)
+  
+  # TODO
+  for (i in 2:n_iters) {
+    proposal = rnorm(1, mean = samples[i - 1], sd = 0.1)
+    
+    if (proposal < 0 || proposal > 1) {
+      samples[i] = samples[i - 1]
+      next
+    }
+    
+    accept = gamma(proposal) / gamma(samples[i - 1])
+    
+    if (runif(1) < accept) {
+      samples[i] = proposal
+    } else {
+      samples[i] = samples[i - 1]
+    }
+  }
+  
+  return(samples)
+}
+
+set.seed(123)
+
+samples = simple_mh(gamma_beta_binomial, 0.5, 1500)
+
+mean = mean(samples)
+median = median(samples)
+
+print(mean)
+print(median)
+
+```

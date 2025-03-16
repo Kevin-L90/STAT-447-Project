@@ -1,0 +1,95 @@
+---
+title: 'STAT 447: Exercise 6'
+author: 'Kevin Liu (94200474)'
+date: "16 February, 2025"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#if you do not have the package, type install.packages("name_of_the_package")
+library(knitr)
+library(tseries)
+```
+
+### Question 1
+
+$\mu_e\sim$ Unif$(0,1)$
+    
+$\lambda_e\sim$ Exp$(0.01)$
+
+$\mu_p\sim$ BetaMP$(0.1,15)$
+
+$\lambda_p\sim$ Exp$(0.01)$
+
+$e_{Pfizer},e_{Moderna}|\mu_e,\lambda_e\sim$ BetaMP$(\mu_e,\lambda_e)$
+
+$p_{Pfizer},p_{Moderna}|\mu_e,\lambda_e\sim$ BetaMP$(\mu_p,\lambda_p)$
+
+$n_c|p\sim$ Binom$(t_c,p)$
+
+$n_v|e,p\sim$ Binom$(t_v,p(1-e))$
+
+### Question 2
+
+```{r, echo=TRUE}
+# this is where your R code goes
+source("../../simple.R")
+
+BetaMP = function(mean, precision){
+  Beta(mean*precision, (1-mean)*precision)
+}
+
+model = function() {
+  mu_e = simulate(Unif(0,1))
+  lambda_e = simulate(Exp(0.01))
+  
+  mu_p = simulate(BetaMP(0.1, 15))
+  lambda_p = simulate(Exp(0.01))
+  
+  eff = list()
+  inc = list()
+  
+  eff[["Pfizer-BioNTech"]] = simulate(BetaMP(mu_e, lambda_e))
+  inc[["Pfizer-BioNTech"]] = simulate(BetaMP(mu_p, lambda_p))
+  
+  eff[["Moderna-NIH"]] = simulate(BetaMP(mu_e, lambda_e))
+  inc[["Moderna-NIH"]] = simulate(BetaMP(mu_p, lambda_p))
+  
+  for (i in seq_along(vaccines)) {
+    vaccine = vaccines$trials[i]
+    arm = vaccines$arms[i]
+    size = vaccines$groupSizes[i]
+    cases = vaccines$numbersOfCases[i]
+    
+    if (arm == "control") {
+      observe(cases, Binom(size, inc[[vaccine]]))
+    } else {
+      observe(cases, Binom(size, inc[[vaccine]] * (1 - eff[[vaccine]])))
+    }
+  }
+
+  return(eff[["Moderna-NIH"]] > eff[["Pfizer-BioNTech"]])
+}
+```
+
+### Question 3
+
+```{r, echo=TRUE}
+# this is where your R code goes
+vaccines = read.csv("vaccines.csv")
+vaccines$groupSizes = as.double(vaccines$groupSizes) # needed due to bug in Binom code
+```
+
+### Question 4
+
+```{r, echo=TRUE}
+# this is where your R code goes
+set.seed(2)
+prob = posterior(model, 10000)
+print(prob)
+```
+
+I am not sure if it is reliable because for the code above, when I set the seed to 1, it would fail for some reason. If this wasn't the case, I would say SNIS is reliable.
