@@ -1,0 +1,141 @@
+---
+title: 'STAT 447: Homework 8'
+author: 'Kevin Liu (94200474)'
+date: "March 16, 2025"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#if you do not have the package, type install.packages("name_of_the_package")
+library(knitr)
+library(tseries)
+library(rstan)
+```
+
+### Question 1
+(a)
+```{r, echo=TRUE}
+suppressPackageStartupMessages(require(ggplot2))
+suppressPackageStartupMessages(require(dplyr))
+
+df = read.csv(url("https://github.com/UBC-Stat-ML/web447/raw/0d6eaa346d78abe4cd125e8fc688c9074d6331d9/data/hubble-1.csv")) %>%
+  rename(distance = R..Mpc.) %>%
+  rename(velocity = v..km.sec.)
+df$velocity = df$velocity/1000
+```
+
+
+(b)
+```{r, echo=TRUE}
+N_obs = nrow(df)
+N_train = N_obs-1
+train_test_dta = list(
+    N  = N_train,
+    xs = df$distance[-N_obs], 
+    ys = df$velocity[-N_obs], 
+    x_pred = df$distance[N_obs]
+)
+
+fit = stan(
+  file = "STAN.stan",
+  data = train_test_dta
+)
+
+quantile(extract(fit)$y_pred, c(0.1, 0.9))
+```
+```{r, echo=TRUE}
+quantile(extract(fit)$y_pred, c(0.1, 0.9))
+```
+
+(c)
+```{r, echo=TRUE}
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(dplyr))
+
+ci_limits <- matrix(NA, nrow = N_obs, ncol = 2)
+
+for (i in 1:N_obs) {
+    dta = list(
+        N  = N_train,
+        xs = df$distance[-i], 
+        ys = df$velocity[-i], 
+        x_pred = df$distance[i]
+    )
+    
+    
+    fit <- stan(
+        file = "STAN.stan",
+        data = dta
+    )
+    
+    ci_limits[i, ] <- quantile(extract(fit)$y_pred, probs = c(0.1, 0.9))
+}
+
+merged_df = df %>% 
+  bind_cols(data.frame(CI_L = ci_limits[,1], CI_R = ci_limits[,2])) %>% 
+  mutate(Inside_CI = (velocity >= CI_L & velocity <= CI_R)) 
+merged_df %>% 
+  ggplot(aes(x = 1:N_obs, y = velocity, ymin = CI_L, ymax = CI_R, color=Inside_CI)) +
+  geom_point() + 
+  geom_errorbar() +
+  theme_minimal() +
+  labs(x = "Point", y = "Velocity")
+```
+4/25 of the points are outside the 80% interval, which is similar to the nominal coverage level.
+
+### Question 2
+
+```{r, echo=TRUE}
+# simple Metropolis-Hastings algorithm (normal proposal)
+simple_mh = function(gamma, initial_point, n_iters, proposal_sd = 1) {
+  samples = numeric(n_iters) 
+  dim = length(initial_point)
+  current_point = initial_point
+  for (i in 1:n_iters) {
+    proposal = rnorm(dim, mean = current_point, sd = proposal_sd) 
+    ratio = gamma(proposal) / gamma(current_point) 
+    if (runif(1) < ratio) {
+      current_point = proposal
+    } else {
+      # rejection, nothing to do, i.e. we stay at the current point
+    }
+    # no matter if we reject or not, accumulate one sample
+    samples[i] = current_point
+  }
+  return(samples)
+}
+
+gamma = function(x) {
+  exp(-0.5 * x ^ 2)
+}
+
+estimate_asymptotic_variance = function(gamma, proposal_sd, C, S) {
+  chains = matrix(NA, nrow = S, ncol = C)
+  
+  for (i in 1:C) {
+    initial = rnorm(1)
+    chains[, i] = simple_mh(gamma, initial, S, proposal_sd)
+  }
+  
+  chainm = colMeans(chains)
+  avar = var(chainm)
+  
+  return(avar)
+}
+
+proposal_sds = 2 ^ seq(-10, 10)
+C = 100
+S = 1000
+
+result = data.frame(proposal_sd = proposal_sds, avar = NA)
+
+for (i in 1:length(proposal_sds)) {
+  result$avar[i] = estimate_asymptotic_variance(gamma, proposal_sds[i], C, S)
+}
+
+print(result)
+```
+The proposal sd with the lowest asymptotic variance appears to be 2. The same proposal sd would not be optimal for the two given targets, as they have different distributions, the first of which being wider, and the second not being centered on 0.

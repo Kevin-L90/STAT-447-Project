@@ -1,0 +1,142 @@
+---
+title: 'STAT 447: Project'
+author: 'Kevin Liu (94200474)'
+date: "April 19, 2025"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#if you do not have the package, type install.packages("name_of_the_package")
+library(knitr)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(rstan)
+```
+
+In this report, I will be approaching the Vancouver Police Department crime database. The database contains crime data from 2013 until present, with columns for type, time, and location. The database can be found on [the VPD crime statistics page](https://geodash.vpd.ca/opendata/#). I chose this data set as it is the same one I used in STAT 201, analyzing how COVID-19 affected the proportion of Commercial Break and Enter crimes.
+
+I will be applying a simple and improved model to the annual Commercial Break and Enter crimes. Finding a model that can accurately predict this data would be useful, as it would allow people to see a trend (hopefully downward) in crime statistics and identify anomalies.
+
+Further information on Vancouver crime statistics can be found [here](https://vpd.ca/crime-statistics/), with live updates and information on how crimes are identified.
+
+```{r, echo=TRUE}
+set.seed(1)
+crime_data = read.csv("crime_data/crime_data.csv")
+head(crime_data)
+```
+First, I will clean and filter the data. I will remove 2025 from the table as the year is incomplete.
+```{r, echo=TRUE}
+crime_data = crime_data %>%
+  filter(!is.na(YEAR)) %>%
+  filter(YEAR != 2025) %>%
+  filter(TYPE == "Break and Enter Commercial")
+
+crime_data %>%
+  reframe(YEAR = as.integer(YEAR)) %>%
+  group_by(YEAR) %>%
+  reframe(count = n()) %>%
+  ggplot() +
+  geom_line(aes(x = YEAR, y = count)) + 
+  labs(x = "Year", y = "Incidents", title = "Plot 1: Annual Commercial Break and Enters")
+```
+
+From here, I will apply a simple model to the data set using stan. The simple model I will be using is
+$Count_{BEC}\sim Poisson(\lambda_t)$
+
+$log(\lambda_t)=\alpha+\beta*Year_t$
+
+With $Count_{BEC}$ being the annual number of Commercial Break and Enter crimes.
+We willcenter YEAR to reduce multicollinearity. The priors we chose for this model are 
+$\alpha = Norm(0, 10)$ and $\beta = Norm(0, 1)$. This is to allow a large range of of values for $\alpha$, while having a reasonable range for the slope.
+```{r, echo=TRUE}
+simple = crime_data %>%
+  reframe(YEAR = as.integer(YEAR),
+            YEARC = YEAR - mean(YEAR)) %>%
+  group_by(YEARC, YEAR) %>%
+  reframe(count = n())
+
+simple_data = list(
+  N = nrow(simple),
+  y = simple$count,
+  x = simple$YEARC
+)
+
+fit = stan(
+  file = "simple.stan",
+  data = simple_data, 
+  seed = 1,
+  refresh = 0
+)
+```
+```{r, echo=TRUE}
+print(fit, pars = c("alpha", "beta"), probs = c(0.025, 0.5, 0.975))
+```
+From this we can see that there is an average log crime count of 7.72 with a negative slope of log(-0.02), which is 0.98. We can plot out the predictions to see how well it fits with the actual data. 
+
+From the table, we can see that we have small se_mean, large n_eff, and an Rhat close to 1. This means that the model is a good fit.
+
+```{r, echo=TRUE}
+posterior = extract(fit)
+
+simple$pred = colMeans(posterior$y_pred)
+
+ggplot(simple, aes(x = YEAR)) +
+  geom_point(aes(y = count), color = "black") +
+  geom_line(aes(y = pred), color = "blue") +
+  labs(title = "Plot 2: Bayesian Poisson Fit for Commercial Break & Enter",
+       y = "Counts")
+```
+
+We can attempt to apply an improved model to the data, as linear model may not provide the best predictions for something like crime statistics. We can attempt to use a quadratic model, based on the pattern of the real data points. (The stan model for this section using mu instead of y_pred because in testing the code, errors appeared with the log rate parameter being too high).
+
+$Count_{BEC}\sim Poisson(\lambda_t)$
+
+$log(\lambda_t)=\alpha+\beta1*Year_t+\beta2*Year_t^2$
+
+```{r, echo=TRUE}
+improved = crime_data %>%
+  reframe(YEAR = as.integer(YEAR),
+            YEARC = YEAR - mean(YEAR)) %>%
+  group_by(YEARC, YEAR) %>%
+  reframe(count = n())
+
+improved$YEARC2 = improved$YEARC^2
+
+improved_data = list(
+  N = nrow(improved),
+  y = improved$count,
+  x = improved$YEARC,
+  x2 = improved$YEARC2
+)
+
+fit = stan(
+  file = "improved.stan",
+  data = improved_data,
+  seed = 1,
+  refresh = 0
+)
+```
+
+```{r, echo=TRUE}
+print(fit, pars = c("alpha", "beta1", "beta2"), probs = c(0.025, 0.5, 0.975))
+```
+From the table, we can see an se_mean that is not close to 0 for alpha, a small n_eff, and a large Rhat. This means that the quadratic model is a poor fit for the crime statistics. This means that the quadratic term was unnecessary and the linear model was sufficient. We can plot this out to see how poor of a fit it is.
+```{r, echo=TRUE}
+posterior = extract(fit)
+
+improved$pred = colMeans(posterior$mu)
+
+ggplot(improved, aes(x = YEAR)) +
+  geom_point(aes(y = count), color = "black") +
+  geom_line(aes(y = pred), color = "blue") +
+  labs(title = "Plot 3: Bayesian Poisson Fit for Commercial Break & Enter",
+       y = "Counts")
+```
+
+In conclusion, we can see that the Commercial Break and Enter crime statistics can be represented with a simple Poisson model of $Crime_{BEC}\sim Poisson(\lambda_t),log(\lambda_t)=7.72-0.02*Year_t$. The model generally captures the trend of crime, however it does not cover potential seasonality/abnormalities.
+
+Some key limitations would be the number of observations; using the annual crime statistics gives us only 22 observations, which may be a limiting factor. Further investigation may want to use monthly crime statistics, with the model potentially including a variable for the month. Additionally, for something like crime statistics, it would be difficult to incorporate all factors into prediction, as it is affected by a large number of things. For example, we can see a dip in crime in 2020, which contributed to the shape that suggested a quadratic model. However, this dip was not likely not due to year, as this was when COVID-19 first popped up.

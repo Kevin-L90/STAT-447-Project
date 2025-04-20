@@ -1,0 +1,209 @@
+---
+title: 'STAT 443: Assignment 2'
+author: 'Kevin Liu (94200474)'
+date: "February 13, 2025"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#if you do not have the package, type install.packages("name_of_the_package")
+library(knitr)
+library(tseries)
+```
+
+### Question 1
+
+(a) 
+
+As given,
+
+$X_t=0.1X_{y-1}+0.2X_{t-2}+Z_t$
+
+Where $Z_t$ is a white noise process.
+
+For AR(2), we have
+
+$\gamma(h)=\phi_1\gamma(h-1)+\phi_2\gamma(h-2),h\ge1$
+
+$h=0$ is the variance equation
+
+$\gamma(0)=\phi_1\gamma(1)+\phi_2\gamma(2)+\sigma^2$
+
+$h=1$ is a special case
+
+$\gamma(1)=\phi_1\gamma(0)+\phi_2\gamma(1)$
+
+$\gamma(1)=0.1\gamma(0)+0.2\gamma(1)$
+
+$0.8\gamma(1)=0.1\gamma(0)$
+
+$\gamma(1)=0.125\gamma(0)$
+
+For $h=2$
+
+$\gamma(2)=\phi_1\gamma(1)+\phi_2\gamma(0)$
+
+$\gamma(2)=0.125\gamma(0)+0.1\gamma(0)$
+
+$\gamma(2)=0.2125\gamma(0)$
+
+To find the ACF, we have
+
+$\frac{\gamma(h)}{\gamma(0)}$
+
+
+$\rho(1)=\frac{\gamma(1)}{\gamma(0)}=0.125$
+
+$\rho(2)=\frac{\gamma(2)}{\gamma(0)}=0.2125$
+
+The autocorrelation function for $h\ge3$ is
+
+$\rho(h)=0.1\rho(h-1)+0.2125\rho(h-2)$
+
+(b)
+
+```{r, echo=TRUE}
+set.seed(2025)
+
+sim = arima.sim(list(ar = c(0.1,0.2)), 10000, sd = 1)
+
+acf(sim, lag.max = 15, main = "ACF of AR(2) sims with Theoretical acf")
+
+rho = numeric(15)
+rho[1] = 0.125
+rho[2] = 0.2125
+
+for (h in 3:15) {
+  rho[h] = 0.1 * rho[h - 1] + 0.2 * rho[h - 2]
+}
+
+points(1:15, rho, col = "red")
+```
+
+### Question 2
+
+(a) 
+
+$X_t=0.5X_{t-1}+Z_t-0.8Z_{t-1}+0.8Z_{t-2}$
+
+$X_t-0.5X_{t-1}=Z_t-0.8Z_{t-1}+0.8Z_{t-2}$
+
+$1 - 0.5B$ gives us 2, which outside the unit circle, so the process is stationary.
+
+$1 - 0.8B + 0.8B^2$
+
+$B=\frac{0.8\pm\sqrt{0.8^2-4(0.8)(0.1)}}{2(0.8)}$
+
+$=\frac{0.8\pm\sqrt{-2.56)}}{1.6)}$
+
+The roots are complex, so to find the magnitude, we can
+
+$|B|=\frac{\sqrt{0.8^2+2.56}}{1.6}$
+
+$=\frac{\sqrt{3.2}}{1.6}\approx1.12$
+
+Because this is greater than 1, the process is invertible.
+
+
+(b)
+
+$X_t=0.5X_{t-1}+Z_t-0.8Z_{t-1}+0.8Z_{t-2}$
+
+$\rightarrow X_t=0.5(0.5X_{t-2}+Z_{t-1}-0.8Z_{t-2}+0.8Z_{t-3})+Z_t-0.8Z_{t-1}+0.8Z_{t-2}$
+
+$=0.25X_{t-2}+Z_t-0.3Z_{t-1}+0.4Z_{t-2}+0.4Z_{t-3}$
+
+Repeating this process, we get
+
+$=0.125X_{t-3}+Z_t-0.3Z_{t-1}+0.65Z_{t-2}+0.2Z_{t-3}+0.2Z_{t-4}$
+
+This will repeat. And as the coefficient on the $X$ term approaches 0, the function will be a purely MA process. Which can be rewritten as $X_t=\psi(B)Z_t$ for some polynomial $\psi(B)=\sum^\infty_{i=0}\psi_iB^i$ where $\psi_i$ approaches 0 as $i\rightarrow \infty$
+
+(c)
+
+$\rho(0)=\frac{\sigma^2(1+(-0.8)^2_1+0.8^2)}{1-0.5^2}$
+
+$=3.04\sigma^2$
+
+$\rho(1)=0.5(3.04\sigma^2)+\sigma^2(-0.8+(-0.8)(0.8))$
+
+$=0.08\sigma^2$
+
+$\rho(2)=0.5(0.08\sigma^2)+0.8\sigma^2$
+
+$=0.84\sigma^2$
+
+$\rho(3)=0.5(0.84\sigma^2)$
+
+$=0.42\sigma^2$
+
+Which will repeat for $h\ge4$, indicating that 
+
+$\rho(h)=0.5\rho(h-1)$
+
+(d)
+
+$X_t-0.5X_{t-1}=Z_t-0.8Z_{t-1}+0.8Z_{t-2}$
+
+Use $B$ as the backward shift operator
+
+$X_t-0.5BX_t=Z_t-0.8BZ_t+0.8B^2Z_t$
+
+$\rightarrow X_t=\frac{1-0.8B+0.8B^2}{1-0.5B}Z_t$
+
+$\frac{1}{1-0.5B}$ can be expressed as an infinite sum $1+\beta_1B+\beta_2B^2+...$ for some constants $\beta_i$
+
+This can be multiplied with {1-0.8B+0.8B^2} and simplified to produce
+
+$X_t=Z_t-0.3Z_{t-1}+0.65Z_{t-2}+0.2Z_{t-3}+0.2Z_{t-4}+...$
+
+$Z_t$ can be rewritten so that the process becomes
+
+$X_t=0.5X_{t-1}+0.4X_{t-2}+0.2Z_{t-3}+0.1Z_{t-4}+...$
+
+### Question 3
+
+(a)
+
+$X_t-aX_{t-1}=Z_t-bZ_{t-2},\quad a,b\in\mathbb{R}\backslash\{0\}$
+
+For stationarity, $1-aB=0$ for stationarity (from the LHS). This gives $B=1/a$ As $|B|>1$, $|a|$ must be less than 1 for the process to be stationary.
+
+For invertibility,
+
+$1-bB^2=0\rightarrow B=\pm\sqrt{\frac{1}{b}}$
+
+It is invertible when $|B|>1$, therefore $|\frac{1}{b}|>1$. From this, in order for the process to not be invertible, $|b|\ge1$.
+
+(b)
+
+$\gamma(0)=\frac{\sigma^2(1+b^2)}{1-a^2}$
+
+$=\frac{1(1+2^2)}{1-(1/3)^2}=5.625$
+
+$\gamma(1)=a\gamma(0)+b\sigma^2$
+
+$=\frac{1}{3}(5.625)+2(1)=3.875$
+
+$\gamma(2)=a\gamma(1)+b\sigma^2$
+
+$=\frac{1}{3}(3.875)+2(1)=3.2917$
+
+$\rho(1)=\frac{\gamma(1)}{\gamma(0)}\approx 0.6889$
+
+$\rho(2)=\frac{\gamma(2)}{\gamma(0)}\approx 0.5852$
+
+## Question 4
+
+From the lecture slide: $\{X_t\}$ is a SARIMA process of order $(p,d,q)\times(P,D,Q)_s$ if it is of the form
+
+$\phi(B)\Phi(B^s)W_t=\theta(B)\Theta(B^s)Z_t$
+
+With the values gives, we have
+
+$(1-\theta_1B)(1-B)^2(1-B^3)X_t=(1+\theta_1B)(1+\Theta_1B^3+\Theta_2B^6)Z_t$
+
+If you simplify both sides, the highest degree on the LHS is 6, and the highest on the right is 7. Therefore the SARIMA process can be written as ARMA(6,7).
